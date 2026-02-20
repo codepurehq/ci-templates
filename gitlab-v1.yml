@@ -15,7 +15,7 @@ codepure_devsecops_gate:
       fi
 
       # Send the scan request to the Codepure Production API
-      RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://app.codepure.com/api/devsecops/scan/trigger" \
+      RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://be93-2001-16a2-cc9e-5100-94b2-8531-9d2c-eba3.ngrok-free.app/api/devsecops/scan/trigger" \
         -H "Authorization: Token $CODEPURE_TOKEN" \
         -H "Content-Type: application/json" \
         -d '{
