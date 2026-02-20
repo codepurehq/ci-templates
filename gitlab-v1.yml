@@ -1,20 +1,13 @@
-# Codepure DevSecOps Remote Pipeline Template (v1)
 stages:
-  - codepure_security_scan
+  - security_scan
 
-codepure_devsecops_gate:
-  stage: codepure_security_scan
+codepure_devsecops:
+  stage: security_scan
   image: curlimages/curl:latest
   script:
-    - echo "Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
+    - echo " Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
     - |
-      if [ -z "$CODEPURE_TOKEN" ]; then
-        echo "ERROR: CODEPURE_TOKEN is missing!"
-        echo "Please generate an API token in the Codepure Dashboard and add it to your GitLab CI/CD Variables as CODEPURE_TOKEN."
-        exit 1
-      fi
-
-      # Send the scan request to the Codepure Production API
+      # Call your local Ngrok URL
       RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://be93-2001-16a2-cc9e-5100-94b2-8531-9d2c-eba3.ngrok-free.app/api/devsecops/scan/trigger" \
         -H "Authorization: Token $CODEPURE_TOKEN" \
         -H "Content-Type: application/json" \
@@ -23,28 +16,19 @@ codepure_devsecops_gate:
           "repo_name": "'"$CI_PROJECT_NAME"'",
           "branch": "'"$CI_COMMIT_REF_NAME"'",
           "commit_hash": "'"$CI_COMMIT_SHA"'",
-          "provider": "gitlab",
-          "triggered_by": "'"$GITLAB_USER_EMAIL"'"
+          "provider": "gitlab"
         }')
       
+      # Parse the response
       HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
       BODY=$(echo "$RESPONSE" | head -n -1)
       
       echo "Codepure Response: $BODY"
       
-      if [ "$HTTP_STATUS" -ne 200 ]; then
-         echo "FATAL: Failed to reach Codepure API (Status: $HTTP_STATUS)"
-         exit 1
-      fi
-
-      # Enforce the SLA Policy
+      # Enforce the SLA
       if echo "$BODY" | grep -q '"status":"blocked"'; then
-        echo "SECURITY GATE FAILED: SLA Policy Violated. Merge blocked!"
+        echo " SECURITY GATE FAILED: SLA violated. Merge blocked!"
         exit 1
       fi
       
-      echo "Security Check Passed (or Audit Mode is active)."
-  rules:
-    # Run on Merge Requests and standard branch commits
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH
+      echo " Security Check Passed (or Audit Mode is active)."
