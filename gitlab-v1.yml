@@ -1,13 +1,17 @@
 stages:
-  - security_scan
+  - codepure_security_scan
 
-codepure_devsecops:
-  stage: security_scan
+codepure_devsecops_gate:
+  stage: codepure_security_scan
   image: curlimages/curl:latest
   script:
     - echo " Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
     - |
-      # Call your local Ngrok URL
+      if [ -z "$CODEPURE_TOKEN" ]; then
+        echo " ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
+        exit 1
+      fi
+
       RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://be93-2001-16a2-cc9e-5100-94b2-8531-9d2c-eba3.ngrok-free.app/api/devsecops/scan/trigger" \
         -H "Authorization: Token $CODEPURE_TOKEN" \
         -H "Content-Type: application/json" \
@@ -16,16 +20,20 @@ codepure_devsecops:
           "repo_name": "'"$CI_PROJECT_NAME"'",
           "branch": "'"$CI_COMMIT_REF_NAME"'",
           "commit_hash": "'"$CI_COMMIT_SHA"'",
-          "provider": "gitlab"
+          "provider": "gitlab",
+          "triggered_by": "'"$GITLAB_USER_EMAIL"'"
         }')
       
-      # Parse the response
       HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
       BODY=$(echo "$RESPONSE" | head -n -1)
       
       echo "Codepure Response: $BODY"
       
-      # Enforce the SLA
+      if [ "$HTTP_STATUS" -ne 200 ]; then
+         echo " FATAL: Failed to reach Codepure API (Status: $HTTP_STATUS)"
+         exit 1
+      fi
+
       if echo "$BODY" | grep -q '"status":"blocked"'; then
         echo " SECURITY GATE FAILED: SLA violated. Merge blocked!"
         exit 1
