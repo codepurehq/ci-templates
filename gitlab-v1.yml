@@ -4,11 +4,13 @@ stages:
 codepure_devsecops_gate:
   stage: codepure_security_scan
   image: curlimages/curl:latest
+  allow_failure:
+    exit_codes: 3 # Tells GitLab: "If it exits with 3, turn Yellow and allow merge"
   script:
-    - echo " Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
+    - echo "🚀 Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
     - |
       if [ -z "$CODEPURE_TOKEN" ]; then
-        echo " ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
+        echo "🚨 ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
         exit 1
       fi
 
@@ -34,9 +36,26 @@ codepure_devsecops_gate:
          exit 1
       fi
 
+      # 1. Check for HARD BLOCK (Red / Exit 1)
       if echo "$BODY" | grep -q '"status":"blocked"'; then
         echo " SECURITY GATE FAILED: SLA violated. Merge blocked!"
         exit 1
       fi
+
+      # 2. Check for SOFT BLOCK / WARN (Yellow / Exit 3)
+      if echo "$BODY" | grep -q '"status":"warn"'; then
+        echo " AUDIT WARNING: Vulnerabilities exceed threshold, but branch is in Audit Mode. Merge allowed."
+        exit 3
+      fi
       
-      echo " Security Check Passed (or Audit Mode is active)."
+      echo " Security Check Passed cleanly."
+
+
+
+
+
+
+
+
+
+
