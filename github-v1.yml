@@ -1,0 +1,56 @@
+name: Codepure DevSecOps Gate
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  codepure_scan:
+    name: Run Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Codepure API
+        run: |
+          if [ -z "${{ secrets.CODEPURE_TOKEN }}" ]; then
+            echo "🚨 ERROR: CODEPURE_TOKEN is missing! Please add it to your GitHub Repository Secrets."
+            exit 1
+          fi
+
+          echo "🚀 Triggering Codepure DevSecOps Scan for branch: ${{ github.ref_name }}..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://app.codepure.com/api/devsecops/scan/trigger" \
+            -H "Authorization: Token ${{ secrets.CODEPURE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "project_id": "${{ github.repository }}",
+              "repo_name": "${{ github.repository }}",
+              "branch": "${{ github.ref_name }}",
+              "commit_hash": "${{ github.sha }}",
+              "provider": "github",
+              "triggered_by": "${{ github.actor }}"
+            }')
+          
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          
+          echo "Codepure Response: $BODY"
+          
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+             echo "🚨 FATAL: Failed to reach Codepure API (Status: $HTTP_STATUS)"
+             exit 1
+          fi
+
+          # 1. Check for HARD BLOCK (Red / Exit 1)
+          if echo "$BODY" | grep -q '"status":"blocked"'; then
+            echo "🚨 SECURITY GATE FAILED: SLA violated. Merge blocked!"
+            exit 1
+          fi
+
+          # 2. Check for SOFT BLOCK / WARN (Yellow / Exit 0 with warning annotation)
+          if echo "$BODY" | grep -q '"status":"warn"'; then
+            echo "::warning::AUDIT WARNING: Vulnerabilities exceed threshold, but branch is in Audit Mode. Merge allowed."
+            exit 0
+          fi
+          
+          echo "✅ Security Check Passed cleanly."
