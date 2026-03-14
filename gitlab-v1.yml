@@ -7,10 +7,10 @@ codepure_devsecops_gate:
   allow_failure:
     exit_codes: 3 # Tells GitLab: "If it exits with 3, turn Yellow and allow merge"
   script:
-    - echo "🚀 Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
+    - echo " Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
     - |
       if [ -z "$CODEPURE_TOKEN" ]; then
-        echo "🚨 ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
+        echo " ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
         exit 1
       fi
 
