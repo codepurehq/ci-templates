@@ -5,15 +5,15 @@ codepure_devsecops_gate:
   stage: codepure_security_scan
   image: alpine:latest
   allow_failure:
-    exit_codes: 3 
+    exit_codes: 3 # Tells GitLab: "If it exits with 3, turn Yellow and allow merge"
   before_script:
-    # 
+    #  FIX 1: Install curl and jq so we can parse the backend response
     - apk add --no-cache curl jq
   script:
     - echo "🚀 Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
     - |
       if [ -z "$CODEPURE_TOKEN" ]; then
-        echo "ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
+        echo " ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
         exit 1
       fi
 
@@ -38,17 +38,24 @@ codepure_devsecops_gate:
          exit 1
       fi
 
-      # FIX 3: Parse JSON response securely using jq
+      #  FIX 2: Parse JSON response securely using jq
       API_STATUS=$(echo "$BODY" | jq -r '.status')
       API_MSG=$(echo "$BODY" | jq -r '.message')
       MD_SUMMARY=$(echo "$BODY" | jq -r '.markdown_summary')
 
-      # FIX 4: Save the Markdown summary to a file for GitLab Artifacts
+      #  FIX 3: Save the Markdown summary to a file
       echo "$MD_SUMMARY" > codepure_report.md
+
+      #  FIX 4: Print the Markdown directly to the GitLab Job Log so developers can see it instantly!
+      echo ""
+      echo "========================================================"
+      cat codepure_report.md
+      echo "========================================================"
+      echo ""
 
       # Output Logic
       if [ "$API_STATUS" == "blocked" ]; then
-        echo "SECURITY GATE FAILED: $API_MSG"
+        echo " SECURITY GATE FAILED: $API_MSG"
         exit 1
       fi
 
@@ -58,8 +65,8 @@ codepure_devsecops_gate:
       fi
       
       echo " Security Check Passed cleanly."
-  
-  # FIX 5: Tell GitLab to read the Markdown file and post it to the Merge Request
+      
+  #  FIX 5: Expose as a downloadable artifact on the Merge Request page
   artifacts:
     when: always
     expose_as: 'Codepure DevSecOps Report'
