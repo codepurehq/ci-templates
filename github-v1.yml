@@ -20,7 +20,7 @@ jobs:
           echo " Triggering Codepure DevSecOps Scan for branch: ${{ github.ref_name }}..."
 
           #  Ensure this is your active NGROK URL
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://app.codepure.com/api/devsecops/scan/trigger" \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://f9d1-2001-16a2-c8ce-e000-34bc-eab2-c35b-c67c.ngrok-free.app/api/devsecops/scan/trigger" \
             -H "Authorization: Token ${{ secrets.CODEPURE_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{
