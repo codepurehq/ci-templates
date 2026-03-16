@@ -3,14 +3,17 @@ stages:
 
 codepure_devsecops_gate:
   stage: codepure_security_scan
-  image: curlimages/curl:latest
+  image: alpine:latest
   allow_failure:
-    exit_codes: 3 # Tells GitLab: "If it exits with 3, turn Yellow and allow merge"
+    exit_codes: 3 
+  before_script:
+    # 
+    - apk add --no-cache curl jq
   script:
-    - echo " Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
+    - echo "🚀 Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
     - |
       if [ -z "$CODEPURE_TOKEN" ]; then
-        echo " ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
+        echo "ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
         exit 1
       fi
 
@@ -29,33 +32,36 @@ codepure_devsecops_gate:
       HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
       BODY=$(echo "$RESPONSE" | head -n -1)
       
-      echo "Codepure Response: $BODY"
-      
       if [ "$HTTP_STATUS" -ne 200 ]; then
          echo " FATAL: Failed to reach Codepure API (Status: $HTTP_STATUS)"
+         echo "Response: $BODY"
          exit 1
       fi
 
-      # 1. Check for HARD BLOCK (Red / Exit 1)
-      if echo "$BODY" | grep -q '"status":"blocked"'; then
-        echo " SECURITY GATE FAILED: SLA violated. Merge blocked!"
+      # FIX 3: Parse JSON response securely using jq
+      API_STATUS=$(echo "$BODY" | jq -r '.status')
+      API_MSG=$(echo "$BODY" | jq -r '.message')
+      MD_SUMMARY=$(echo "$BODY" | jq -r '.markdown_summary')
+
+      # FIX 4: Save the Markdown summary to a file for GitLab Artifacts
+      echo "$MD_SUMMARY" > codepure_report.md
+
+      # Output Logic
+      if [ "$API_STATUS" == "blocked" ]; then
+        echo "SECURITY GATE FAILED: $API_MSG"
         exit 1
       fi
 
-      # 2. Check for SOFT BLOCK / WARN (Yellow / Exit 3)
-      if echo "$BODY" | grep -q '"status":"warn"'; then
-        echo " AUDIT WARNING: Vulnerabilities exceed threshold, but branch is in Audit Mode. Merge allowed."
+      if [ "$API_STATUS" == "warn" ]; then
+        echo " AUDIT WARNING: $API_MSG"
         exit 3
       fi
       
       echo " Security Check Passed cleanly."
-
-
-
-
-
-
-
-
-
-
+  
+  # FIX 5: Tell GitLab to read the Markdown file and post it to the Merge Request
+  artifacts:
+    when: always
+    expose_as: 'Codepure DevSecOps Report'
+    paths:
+      - codepure_report.md
