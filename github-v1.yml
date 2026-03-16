@@ -1,9 +1,11 @@
-name: Codepure DevSecOps Gate
+name: Codepure DevSecOps Remote Template
+
+
 on:
-  push:
-    branches: [ "**" ]
-  pull_request:
-    branches: [ "**" ]
+  workflow_call:
+    secrets:
+      CODEPURE_TOKEN:
+        required: true
 
 jobs:
   codepure_scan:
@@ -17,7 +19,7 @@ jobs:
             exit 1
           fi
 
-          echo " Triggering Codepure DevSecOps Scan for branch: ${{ github.ref_name }}..."
+          echo "🚀 Triggering Codepure DevSecOps Scan for branch: ${{ github.ref_name }}..."
 
           #  Ensure this is your active NGROK URL
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://f9d1-2001-16a2-c8ce-e000-34bc-eab2-c35b-c67c.ngrok-free.app/api/devsecops/scan/trigger" \
