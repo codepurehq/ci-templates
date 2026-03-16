@@ -13,17 +13,18 @@ jobs:
       - name: Trigger Codepure API
         run: |
           if [ -z "${{ secrets.CODEPURE_TOKEN }}" ]; then
-            echo "🚨 ERROR: CODEPURE_TOKEN is missing! Please add it to your GitHub Repository Secrets."
+            echo " ERROR: CODEPURE_TOKEN is missing! Please add it to your GitHub Repository Secrets."
             exit 1
           fi
 
-          echo "🚀 Triggering Codepure DevSecOps Scan for branch: ${{ github.ref_name }}..."
+          echo " Triggering Codepure DevSecOps Scan for branch: ${{ github.ref_name }}..."
 
+          #  Ensure this is your active NGROK URL
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://app.codepure.com/api/devsecops/scan/trigger" \
             -H "Authorization: Token ${{ secrets.CODEPURE_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{
-              "project_id": "${{ github.repository }}",
+              "project_id": "${{ github.repository }}", 
               "repo_name": "${{ github.repository }}",
               "branch": "${{ github.ref_name }}",
               "commit_hash": "${{ github.sha }}",
@@ -34,23 +35,28 @@ jobs:
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n -1)
           
-          echo "Codepure Response: $BODY"
-          
           if [ "$HTTP_STATUS" -ne 200 ]; then
-             echo "🚨 FATAL: Failed to reach Codepure API (Status: $HTTP_STATUS)"
+             echo " FATAL: Failed to reach Codepure API (Status: $HTTP_STATUS)"
+             echo "Response: $BODY"
              exit 1
           fi
 
-          # 1. Check for HARD BLOCK (Red / Exit 1)
-          if echo "$BODY" | grep -q '"status":"blocked"'; then
-            echo "🚨 SECURITY GATE FAILED: SLA violated. Merge blocked!"
-            exit 1
-          fi
+          #  Parse JSON response securely using jq
+          API_STATUS=$(echo "$BODY" | jq -r '.status')
+          API_MSG=$(echo "$BODY" | jq -r '.message')
+          MD_SUMMARY=$(echo "$BODY" | jq -r '.markdown_summary')
 
-          # 2. Check for SOFT BLOCK / WARN (Yellow / Exit 0 with warning annotation)
-          if echo "$BODY" | grep -q '"status":"warn"'; then
-            echo "::warning::AUDIT WARNING: Vulnerabilities exceed threshold, but branch is in Audit Mode. Merge allowed."
+          #  1. Draw the Markdown Table on the GitHub Job Summary Page
+          echo "$MD_SUMMARY" >> $GITHUB_STEP_SUMMARY
+
+          #  2. Post Native GitHub PR Annotations (Red/Yellow boxes on the code!)
+          if [ "$API_STATUS" == "blocked" ]; then
+            echo "::error title=Codepure Security Gate Failed::$API_MSG"
+            exit 1
+          elif [ "$API_STATUS" == "warn" ]; then
+            echo "::warning title=Codepure Audit Warning::$API_MSG"
+            exit 0
+          else
+            echo "::notice title=Codepure Security Passed::All checks passed cleanly."
             exit 0
           fi
-          
-          echo "✅ Security Check Passed cleanly."
