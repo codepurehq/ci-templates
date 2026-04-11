@@ -17,7 +17,7 @@ codepure_devsecops_gate:
         exit 1
       fi
 
-      RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://2cf5-2001-16a2-df52-ab00-2461-ad8a-e39f-a3b9.ngrok-free.ap/api/devsecops/scan/trigger" \
+      RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://app.codepure.com/api/devsecops/scan/trigger" \
         -H "Authorization: Token $CODEPURE_TOKEN" \
         -H "Content-Type: application/json" \
         -d '{
