@@ -10,14 +10,14 @@ codepure_devsecops_gate:
     #  FIX 1: Install curl and jq so we can parse the backend response
     - apk add --no-cache curl jq
   script:
-    - echo "🚀 Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
+    - echo " Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
     - |
       if [ -z "$CODEPURE_TOKEN" ]; then
         echo " ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
         exit 1
       fi
 
-      RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://a559-2001-16a2-cdb7-1a00-fb14-d079-672b-a558.ngrok-free.app/api/devsecops/scan/trigger" \
+      RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://2cf5-2001-16a2-df52-ab00-2461-ad8a-e39f-a3b9.ngrok-free.ap/api/devsecops/scan/trigger" \
         -H "Authorization: Token $CODEPURE_TOKEN" \
         -H "Content-Type: application/json" \
         -d '{
