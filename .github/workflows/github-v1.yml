@@ -1,39 +1,48 @@
-name: Codepure DevSecOps Remote Template
-
+name: Codepure Security Scan
 
 on:
-  workflow_call:
-    secrets:
-      CODEPURE_TOKEN:
-        required: true
+  # 1. Run pipeline if it's a Pull Request
+  pull_request:
+    types: [opened, synchronize, reopened]
+  # 2. Run pipeline if someone pushes/merges directly to the default branch
+  push:
+    branches: [ "main", "master" ]
 
 jobs:
-  codepure_scan:
-    name: Run Vulnerability Scan
+  codepure_devsecops_gate:
+    name: Codepure Scan
     runs-on: ubuntu-latest
+    
     steps:
       - name: Trigger Codepure API
+        id: codepure-scan
         run: |
+          echo " Triggering Codepure DevSecOps Scan..."
+          
           if [ -z "${{ secrets.CODEPURE_TOKEN }}" ]; then
             echo " ERROR: CODEPURE_TOKEN is missing! Please add it to your GitHub Repository Secrets."
             exit 1
           fi
+          
+          # Dynamically map GitHub context variables for PRs vs Pushes
+          BRANCH_NAME="${{ github.head_ref || github.ref_name }}"
+          BASE_BRANCH="${{ github.base_ref || github.event.repository.default_branch }}"
+          COMMIT_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
 
-          echo "🚀 Triggering Codepure DevSecOps Scan for branch: ${{ github.ref_name }}..."
-
-          #  Ensure this is your active NGROK URL
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://f9d1-2001-16a2-c8ce-e000-34bc-eab2-c35b-c67c.ngrok-free.app/api/devsecops/scan/trigger" \
+          # Using the ngrok URL provided from your GitLab config
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://1798-2001-16a2-df2a-3700-6d57-96ff-cfb3-f25.ngrok-free.app/api/devsecops/scan/trigger" \
             -H "Authorization: Token ${{ secrets.CODEPURE_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{
-              "project_id": "${{ github.repository }}", 
-              "repo_name": "${{ github.repository }}",
-              "branch": "${{ github.ref_name }}",
-              "commit_hash": "${{ github.sha }}",
+              "project_id": "'"${{ github.repository_id }}"'",
+              "repo_name": "'"${{ github.repository }}"'",
+              "branch": "'"$BRANCH_NAME"'",
+              "base_branch": "'"$BASE_BRANCH"'",
+              "commit_hash": "'"$COMMIT_SHA"'",
               "provider": "github",
-              "triggered_by": "${{ github.actor }}"
+              "triggered_by": "'"${{ github.actor }}"'"
             }')
-          
+            
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n -1)
           
@@ -43,22 +52,44 @@ jobs:
              exit 1
           fi
 
-          #  Parse JSON response securely using jq
+          # Parse JSON response securely using jq (pre-installed on ubuntu-latest)
           API_STATUS=$(echo "$BODY" | jq -r '.status')
           API_MSG=$(echo "$BODY" | jq -r '.message')
           MD_SUMMARY=$(echo "$BODY" | jq -r '.markdown_summary')
 
-          #  1. Draw the Markdown Table on the GitHub Job Summary Page
+          # Save the Markdown summary to a file
+          echo "$MD_SUMMARY" > codepure_report.md
+
+          #  GitHub Exclusive: Render Markdown directly on the Action Summary UI
           echo "$MD_SUMMARY" >> $GITHUB_STEP_SUMMARY
 
-          #  2. Post Native GitHub PR Annotations (Red/Yellow boxes on the code!)
+          # Print the Markdown directly to the Job Log
+          echo ""
+          echo "========================================================"
+          cat codepure_report.md
+          echo "========================================================"
+          echo ""
+
+          # Output Logic
           if [ "$API_STATUS" == "blocked" ]; then
-            echo "::error title=Codepure Security Gate Failed::$API_MSG"
+            # The ::error syntax creates a red annotation in the PR
+            echo "::error title=Security Gate Failed::$API_MSG"
+            echo " SECURITY GATE FAILED: $API_MSG"
             exit 1
-          elif [ "$API_STATUS" == "warn" ]; then
-            echo "::warning title=Codepure Audit Warning::$API_MSG"
-            exit 0
-          else
-            echo "::notice title=Codepure Security Passed::All checks passed cleanly."
+          fi
+
+          if [ "$API_STATUS" == "warn" ]; then
+            # The ::warning syntax creates a yellow annotation in the PR, but allows the merge
+            echo "::warning title=Audit Warning::$API_MSG"
+            echo " AUDIT WARNING: $API_MSG"
             exit 0
           fi
+          
+          echo "Security Check Passed cleanly (or was skipped by policy)."
+
+      - name: Upload Report Artifact
+        if: always() # Upload artifact even if the security gate blocks the merge
+        uses: actions/upload-artifact@v4
+        with:
+          name: Codepure DevSecOps Report
+          path: codepure_report.md
