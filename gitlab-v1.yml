@@ -1,3 +1,11 @@
+# Add this at the VERY TOP to prevent double-scanning!
+workflow:
+  rules:
+    # 1. Run pipeline if it's a Merge Request
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    # 2. Run pipeline if someone pushes/merges directly to the default branch (e.g., main)
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
 stages:
   - codepure_security_scan
 
@@ -7,23 +15,24 @@ codepure_devsecops_gate:
   allow_failure:
     exit_codes: 3 # Tells GitLab: "If it exits with 3, turn Yellow and allow merge"
   before_script:
-    #  FIX 1: Install curl and jq so we can parse the backend response
+    # Install curl and jq so we can parse the backend response
     - apk add --no-cache curl jq
   script:
-    - echo " Triggering Codepure DevSecOps Scan for $CI_COMMIT_REF_NAME..."
+    - echo " Triggering Codepure DevSecOps Scan..."
     - |
       if [ -z "$CODEPURE_TOKEN" ]; then
-        echo " ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
+        echo "ERROR: CODEPURE_TOKEN is missing! Please add it to your GitLab CI/CD Variables."
         exit 1
       fi
 
-      RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://app.codepure.com/api/devsecops/scan/trigger" \
+      RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://1798-2001-16a2-df2a-3700-6d57-96ff-cfb3-f25.ngrok-free.app/api/devsecops/scan/trigger" \
         -H "Authorization: Token $CODEPURE_TOKEN" \
         -H "Content-Type: application/json" \
         -d '{
           "project_id": "'"$CI_PROJECT_ID"'",
           "repo_name": "'"$CI_PROJECT_NAME"'",
           "branch": "'"$CI_COMMIT_REF_NAME"'",
+          "base_branch": "'"${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-$CI_DEFAULT_BRANCH}"'",
           "commit_hash": "'"$CI_COMMIT_SHA"'",
           "provider": "gitlab",
           "triggered_by": "'"$GITLAB_USER_EMAIL"'"
@@ -38,15 +47,15 @@ codepure_devsecops_gate:
          exit 1
       fi
 
-      #  FIX 2: Parse JSON response securely using jq
+      # Parse JSON response securely using jq
       API_STATUS=$(echo "$BODY" | jq -r '.status')
       API_MSG=$(echo "$BODY" | jq -r '.message')
       MD_SUMMARY=$(echo "$BODY" | jq -r '.markdown_summary')
 
-      #  FIX 3: Save the Markdown summary to a file
+      # Save the Markdown summary to a file
       echo "$MD_SUMMARY" > codepure_report.md
 
-      #  FIX 4: Print the Markdown directly to the GitLab Job Log so developers can see it instantly!
+      # Print the Markdown directly to the GitLab Job Log
       echo ""
       echo "========================================================"
       cat codepure_report.md
@@ -64,9 +73,9 @@ codepure_devsecops_gate:
         exit 3
       fi
       
-      echo " Security Check Passed cleanly."
+      echo " Security Check Passed cleanly (or was skipped by policy)."
       
-  #  FIX 5: Expose as a downloadable artifact on the Merge Request page
+  # Expose as a downloadable artifact on the Merge Request page
   artifacts:
     when: always
     expose_as: 'Codepure DevSecOps Report'
